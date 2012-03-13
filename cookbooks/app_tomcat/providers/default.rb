@@ -266,7 +266,7 @@ action :setup_vhost do
       docroot4apache = "#{node[:tomcat][:docroot]}/ROOT"
     end
 
-    port = new_resource.port
+    port = new_resource.app_port
 
 
     log "  Configuring apache vhost for tomcat"
@@ -275,7 +275,7 @@ action :setup_vhost do
       source "apache_mod_jk_vhost.erb"
       variables(
         :docroot     => docroot4apache,
-        :vhost_port  => port.to_s,
+        :vhost_port  => port,
         :server_name => node[:web_apache][:server_name],
         :apache_log_dir => node[:apache][:log_dir]
       )

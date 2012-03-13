@@ -9,8 +9,8 @@ rs_utils_marker :begin
 
 log "  Configuring vhost file for App server"
 app "default" do
-  root node[:app][:root]
-  port node[:app][:port]
+  root node[:app][:app_root]
+  port node[:app][:app_port]
   action :setup_vhost
   persist true
 end

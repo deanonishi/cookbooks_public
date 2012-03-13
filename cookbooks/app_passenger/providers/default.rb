@@ -99,8 +99,8 @@ end
 
 # Setup apache/passenger virtual host
 action :setup_vhost do
-  port = new_resource.port
-  project_root = new_resource.root
+  port = new_resource.app_port
+  project_root = new_resource.app_root
 
   # Removing preinstalled apache ssl.conf as it conflicts with ports.conf of web:apache
   log "  Removing ssl.conf"
@@ -113,7 +113,7 @@ action :setup_vhost do
 
   # Generation of new apache ports.conf
   log "  Generating new apache ports.conf"
-  node[:apache][:listen_ports] = port.to_s
+  node[:apache][:listen_ports] = port
 
   template "#{node[:apache][:dir]}/ports.conf" do
     cookbook "apache2"
