@@ -1,6 +1,5 @@
 #
 # Cookbook Name::app
-# Recipe::do_code_update
 #
 # Copyright RightScale, Inc. All rights reserved.  All access and use subject to the
 # RightScale Terms of Service available at http://www.rightscale.com/terms.php and,
@@ -10,6 +9,7 @@ rs_utils_marker :begin
 
 log "  Updating project code repository"
 app "default" do
+  persist true
   destination node[:app][:destination]
   action :code_update
 end

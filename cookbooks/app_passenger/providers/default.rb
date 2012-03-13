@@ -1,33 +1,30 @@
+#
 # Cookbook Name:: app_passenger
-# Provider:: app_passenger
 #
 # Copyright RightScale, Inc. All rights reserved.  All access and use subject to the
 # RightScale Terms of Service available at http://www.rightscale.com/terms.php and,
 # if applicable, other agreements such as a RightScale Master Subscription Agreement.
 
-#stop apache/passenger
+# Stop apache/passenger
 action :stop do
   log "  Running stop sequence"
-  bash "Stopping apache" do
-    flags "-ex"
-    code <<-EOH
-     /etc/init.d/#{node[:apache][:config_subdir]} stop
-    EOH
+  service "apache2" do
+    action :stop
+    persist false
   end
+
 end
 
-#start apache/passenger
+# Start apache/passenger
 action :start do
   log "  Running start sequence"
-  bash "Starting apache" do
-    flags "-ex"
-    code <<-EOH
-     /etc/init.d/#{node[:apache][:config_subdir]} start
-    EOH
+  service "apache2" do
+    action :start
+    persist false
   end
 end
 
-#restart apache/passenger
+# Restart apache/passenger
 action :restart do
   log "  Running restart sequence"
   action_stop
@@ -38,14 +35,14 @@ end
 # Installing required packages to system
 action :install do
 
-  #Installing some apache development headers required for rubyEE
+  # Installing some apache development headers required for rubyEE
   packages = new_resource.packages
   log "  Packages which will be installed: #{packages}"
   packages.each do |p|
     package p
   end
 
-  #Saving project name variables
+  # Saving project name variables for use in operational mode
   ENV['RAILS_APP'] = node[:web_apache][:application_name]
 
   bash "save global vars" do
@@ -100,10 +97,12 @@ action :install do
 
 end
 
-#setup apache/passenger virtual host
+# Setup apache/passenger virtual host
 action :setup_vhost do
+  port = new_resource.port
+  project_root = new_resource.root
 
-  #Removing preinstalled apache ssl.conf as it conflicts with ports.conf of web:apache
+  # Removing preinstalled apache ssl.conf as it conflicts with ports.conf of web:apache
   log "  Removing ssl.conf"
   file "/etc/httpd/conf.d/ssl.conf" do
     action :delete
@@ -112,14 +111,14 @@ action :setup_vhost do
   end
 
 
-  # Generation of new apache ports.conf, based on user prefs
+  # Generation of new apache ports.conf
   log "  Generating new apache ports.conf"
-  template "#{node[:app_passenger][:apache][:install_dir]}/ports.conf" do
-    source      "ports.conf.erb"
-    cookbook    'app_passenger'
-    variables(
-        :vhost_port => node[:app][:app_port]
-      )
+  node[:apache][:listen_ports] = port.to_s
+
+  template "#{node[:apache][:dir]}/ports.conf" do
+    cookbook "apache2"
+    source "ports.conf.erb"
+    variables :apache_listen_ports => node[:apache][:listen_ports]
   end
 
   log "  Unlinking default apache vhost"
@@ -127,15 +126,13 @@ action :setup_vhost do
     enable false
   end
 
-  port = new_resource.app_port
-  project_root = new_resource.app_root
   # Generation of new vhost config, based on user prefs
   log"  Generating new apache vhost"
   web_app "http-#{port}-#{node[:web_apache][:server_name]}.vhost" do
     template                   "basic_vhost.erb"
     cookbook                   'app_passenger'
     docroot                    project_root
-    vhost_port                 port
+    vhost_port                 port.to_s
     server_name                node[:web_apache][:server_name]
     rails_env                  node[:app_passenger][:project][:environment]
     apache_install_dir         node[:app_passenger][:apache][:install_dir]
@@ -152,49 +149,26 @@ action :setup_vhost do
 
 end
 
-#setup project db connection
+# Setup project db connection
 action :setup_db_connection do
 
   deploy_dir = new_resource.destination
   db_name = new_resource.database_name
-  db_user = new_resource.database_user
-  db_password = new_resource.database_password
-  db_sever_fqdn = new_resource.database_sever_fqdn
 
-
-    # Tell MySQL to fill in our connection template
+  # Tell MySQL to fill in our connection template
   log "  Generating database.yml"
-
   db_mysql_connect_app "#{deploy_dir.chomp}/config/database.yml"  do
     template      "database.yml.erb"
     cookbook      "app_passenger"
     owner         node[:app_passenger][:apache][:user]
     group         node[:app_passenger][:apache][:user]
-#    adapter       node[:app_passenger][:project][:db][:adapter]
-#    environment   node[:app_passenger][:project][:environment]
     database      db_name
   end
 
-=begin
-  template "#{deploy_dir.chomp}/config/database.yml" do
-    owner node[:app_passenger][:apache][:user]
-    source "database.yml.erb"
-    cookbook 'app_passenger'
-    variables(
-      :adapter =>      node[:app_passenger][:project][:db][:adapter],
-      :environment =>  node[:app_passenger][:project][:environment],
-      :database =>     db_name,
-      :user =>         db_user,
-      :password =>     db_password,
-      :fqdn =>         db_sever_fqdn
-          )
-  end
-=end
-
-  #defining $RAILS_ENV
+  # Defining $RAILS_ENV
   ENV['RAILS_ENV'] = node[:app_passenger][:project][:environment]
 
-  #Creating bash file for manual $RAILS_ENV setup
+  # Creating bash file for manual $RAILS_ENV setup
   log "  Creating bash file for manual $RAILS_ENV setup"
   template "/etc/profile.d/rails_env.sh" do
     mode         '0744'
@@ -207,7 +181,7 @@ action :setup_db_connection do
 
 end
 
-
+# Download/Update application repository
 action :code_update do
   deploy_dir = new_resource.destination
 
@@ -217,8 +191,8 @@ action :code_update do
     not_if do ::File.exists?(deploy_dir.chomp)  end
   end
 
-  #Reading app name from tmp file (for recipe execution in "operational" phase))
-  #Waiting for "run_lists"
+  # Reading app name from tmp file (for recipe execution in "operational" phase))
+  # Waiting for "run_lists"
   if(deploy_dir == "/home/rails/")
     app_name = IO.read('/tmp/appname')
     deploy_dir = "/home/rails/#{app_name.to_s.chomp}"
@@ -232,6 +206,7 @@ action :code_update do
   directory "#{deploy_dir.chomp}/shared/system" do
     recursive true
   end
+  
   log "  Starting source code download sequence..."
   repo "default" do
     destination deploy_dir
@@ -242,11 +217,14 @@ action :code_update do
     persist false
   end
 
+  log"  Generating new logrotatate config for rails application"
+  rs_utils_logrotate_app "rails" do
+    cookbook "app_passenger"
+    template "logrotate_rails.erb"
+    path ["#{deploy_dir}/log/*.log" ]
+    frequency "daily"
+    rotate 7
+    create "660 #{node[:app_passenger][:apache][:user]} #{node[:app_passenger][:apache][:user]}"
+  end
+
 end
-
-
-
-
-
-
-

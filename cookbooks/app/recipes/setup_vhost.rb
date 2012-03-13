@@ -1,5 +1,5 @@
 #
-# Cookbook Name:: db
+# Cookbook Name::app
 #
 # Copyright RightScale, Inc. All rights reserved.  All access and use subject to the
 # RightScale Terms of Service available at http://www.rightscale.com/terms.php and,
@@ -7,14 +7,12 @@
 
 rs_utils_marker :begin
 
-# Setup default values for database resource
-#
-db node[:db][:data_dir] do
+log "  Configuring vhost file for App server"
+app "default" do
+  root node[:app][:root]
+  port node[:app][:port]
+  action :setup_vhost
   persist true
-  provider node[:db][:provider]
-  action :nothing
 end
-
-include_recipe "db::install_client"
 
 rs_utils_marker :end

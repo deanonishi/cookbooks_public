@@ -1,7 +1,7 @@
 {
   "name": "app_tomcat",
   "description": "Installs the tomcat application server.",
-  "long_description": "= RightScale App Tomcat Cookbook\n\n== DESCRIPTION:\n\n* Cookbook provides tomcat implementation of app LWRP.\n* Installs and configures, tomcat application server.\n\n== REQUIREMENTS:\n\n* Requires a VM launched from a RightScale managed RightImage\n\n* Tested on CentOS 5.6 RightImage\n* Tested on Ubuntu RightImage\n\n== SETUP:\n\n* Place tomcat::default recipe into your runlist to setup the application server.\n* When  using a RightScale ServerTemplate, this will also automatically add the\n  common attributes to your ServerTemplate inputs.\n\n== USAGE:\n * Choose image and cloud.\n * Fill required input fields.\n\n== KNOWN LIMITATIONS\n\n* none\n",
+  "long_description": "= RightScale App Tomcat Cookbook\n\n== DESCRIPTION:\n\n* Cookbook provides tomcat implementation of app LWRP.\n* Installs and configures, tomcat application server.\n\n== REQUIREMENTS:\n\n* Requires a VM launched from a RightScale managed RightImage\n* Tested on CentOS 5.6 RightImage\n* Tested on Ubuntu RightImage\n\n== SETUP:\n\n* Place tomcat::default recipe into your runlist to setup the application server.\n* When using a RightScale ServerTemplate, this will also automatically add the\n  common attributes to your ServerTemplate inputs.\n\n== USAGE:\n\n * Choose image and cloud.\n * Fill required input fields.\n\n== KNOWN LIMITATIONS\n\n* none\n\n= LICENSE\n\nCopyright RightScale, Inc. All rights reserved.  All access and use subject to the\nRightScale Terms of Service available at http://www.rightscale.com/terms.php and,\nif applicable, other agreements such as a RightScale Master Subscription Agreement.\n",
   "maintainer": "RightScale, Inc.",
   "maintainer_email": "support@rightscale.com",
   "license": "Copyright RightScale, Inc. All rights reserved.  All access and use subject to the RightScale Terms of Service available at http://www.rightscale.com/terms.php and, if applicable, other agreements such as a RightScale Master Subscription Agreement.\n",
@@ -39,8 +39,8 @@
     },
     "tomcat/code/root_war": {
       "display_name": "War file for ROOT",
-      "description": "The name of the war file to be renamed to ROOT.war. Ex: myapplication.war",
-      "required": "optional",
+      "description": "The path to the war file relative to project repo root directory. Will be renamed to ROOT.war. Ex: /dist/app_test.war",
+      "required": "recommended",
       "default": "",
       "choice": [
 

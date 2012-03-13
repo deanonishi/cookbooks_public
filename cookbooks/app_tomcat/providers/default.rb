@@ -1,5 +1,5 @@
+#
 # Cookbook Name:: app_tomcat
-# Provider:: app_tomcat
 #
 # Copyright RightScale, Inc. All rights reserved.  All access and use subject to the
 # RightScale Terms of Service available at http://www.rightscale.com/terms.php and,
@@ -7,21 +7,17 @@
 
 action :stop do
   log "  Running stop sequence"
-  bash "Stopping tomcat" do
-    flags "-ex"
-    code <<-EOH
-     /etc/init.d/tomcat6 stop
-    EOH
+  service "tomcat6" do
+    action :stop
+    persist false
   end
 end
 
 action :start do
   log "  Running start sequence"
-  bash "Starting tomcat" do
-    flags "-ex"
-    code <<-EOH
-     /etc/init.d/tomcat6 start
-    EOH
+  service "tomcat6" do
+    action :start
+    persist false
   end
 
 end
@@ -33,7 +29,7 @@ action :restart do
   action_start
 end
 
-
+#Installing required packages and prepare system for tomcat
 action :install do
 
   packages = new_resource.packages
@@ -119,6 +115,8 @@ action :install do
 
 end
 
+
+# Setup apache virtual host and corresponding tomcat configs
 action :setup_vhost do
 
   log "  Creating tomcat6.conf"
@@ -145,7 +143,7 @@ action :setup_vhost do
     action :create
     source "server_xml.erb"
     group "root"
-    owner "root"
+    owner "#{node[:tomcat][:app_user]}"
     mode "0644"
     cookbook 'app_tomcat'
     variables(
@@ -164,10 +162,10 @@ action :setup_vhost do
     action_start
 
   log "  Setup mod_jk vhost"
-  #Setup mod_jk vhost start
+  # Setup mod_jk vhost start
   etc_apache = "/etc/#{node[:apache][:config_subdir]}"
 
-  #check if mod_jk is installed
+  # Check if mod_jk is installed
   if !::File.exists?("#{etc_apache}/conf.d/mod_jk.conf")
 
     arch = node[:kernel][:machine]
@@ -238,28 +236,28 @@ action :setup_vhost do
     end
 
     log "Finished configuring mod_jk, creating the application vhost..."
-    execute "Enable a2enmod apache module" do
-      command "a2enmod rewrite && a2enmod deflate"
+
+    # Enabling required apache modules
+    node[:tomcat][:module_dependencies].each do |mod|
+      apache_module mod
     end
 
-    execute "Enable mod_proxy apache module" do
-      command "a2enmod proxy"
-      only_if do node[:platform] == "redhat" end
-    end
-
+    # Apache fix on RHEL
     file "/etc/httpd/conf.d/README" do
       action :delete
       only_if do node[:platform] == "redhat" end
     end
 
     log "  Generating new apache ports.conf"
-    template "/etc/#{node[:apache][:config_subdir]}/ports.conf" do
-      source      "ports.conf.erb"
-      cookbook    'app_tomcat'
+    node[:apache][:listen_ports] = "80"
+
+    template "#{node[:apache][:dir]}/ports.conf" do
+      cookbook "apache2"
+      source "ports.conf.erb"
+      variables :apache_listen_ports => node[:apache][:listen_ports]
     end
 
-
-
+     # Configuring document root for apache
     if ("#{node[:tomcat][:code][:root_war]}" == "")
       log "root_war not defined, setting apache docroot to #{node[:tomcat][:docroot]}"
       docroot4apache = "#{node[:tomcat][:docroot]}"
@@ -268,24 +266,25 @@ action :setup_vhost do
       docroot4apache = "#{node[:tomcat][:docroot]}/ROOT"
     end
 
-    log "  Configure apache vhost for tomcat"
+    port = new_resource.port
+
+
+    log "  Configuring apache vhost for tomcat"
     template "#{etc_apache}/sites-enabled/#{node[:web_apache][:application_name]}.conf" do
       action :create_if_missing
       source "apache_mod_jk_vhost.erb"
       variables(
         :docroot     => docroot4apache,
-        :vhost_port  => node[:app][:port],
+        :vhost_port  => port.to_s,
         :server_name => node[:web_apache][:server_name],
         :apache_log_dir => node[:apache][:log_dir]
       )
       cookbook 'app_tomcat'
     end
 
-    bash "Restarting apache" do
-      flags "-ex"
-      code <<-EOH
-        /etc/init.d/#{node[:apache][:config_subdir]} restart
-      EOH
+    service "#{node[:apache][:config_subdir]}" do
+      action :restart
+      persist false
     end
 
   else
@@ -294,15 +293,15 @@ action :setup_vhost do
 
 end
 
+# Setup project db connection
 action :setup_db_connection do
-  log "  Setup project db connection"
 
   db_name = new_resource.database_name
 
   log "  Creating context.xml"
   db_mysql_connect_app "/etc/tomcat6/context.xml"  do
     template      "context_xml.erb"
-    owner         "root"
+    owner         "#{node[:tomcat][:app_user]}"
     group         "root"
     mode          "0644"
     database      db_name
@@ -312,7 +311,7 @@ action :setup_db_connection do
   log "  Creating context.xml"
   template "/etc/tomcat6/web.xml" do
     source "web_xml.erb"
-    owner "root"
+    owner "#{node[:tomcat][:app_user]}"
     group "root"
     mode "0644"
     cookbook 'app_tomcat'
@@ -320,7 +319,7 @@ action :setup_db_connection do
 
   cookbook_file "/usr/share/tomcat6/lib/jstl-api-1.2.jar" do
     source "jstl-api-1.2.jar"
-    owner "root"
+    owner "#{node[:tomcat][:app_user]}"
     group "root"
     mode "0644"
     cookbook 'app_tomcat'
@@ -329,54 +328,53 @@ action :setup_db_connection do
 
   cookbook_file "/usr/share/tomcat6/lib/jstl-impl-1.2.jar" do
     source "jstl-impl-1.2.jar"
-    owner "root"
+    owner "#{node[:tomcat][:app_user]}"
     group "root"
     mode "0644"
     cookbook 'app_tomcat'
   end
 end
 
+# Setup monitoring tools for tomcat
 action :setup_monitoring do
 
   log "  Setup of collectd monitoring for tomcat"
-rs_utils_enable_collectd_plugin 'exec'
+  rs_utils_enable_collectd_plugin 'exec'
 
-  if !::File.exists?("/usr/share/java/collectd.jar")
-    # rebuild the collectd configuration file if necessary
-    #include_recipe "rs_utils::setup_monitoring"
-
-    cookbook_file "/usr/share/java/collectd.jar" do
-      source "collectd.jar"
-      mode "0644"
-      cookbook 'app_tomcat'
-    end
-
-    bash "Configure collectd for tomcat" do
-      flags "-ex"
-      code <<-EOH
-        [ -d /usr/share/tomcat6/lib ] && ln -s /usr/share/java/collectd.jar /usr/share/tomcat6/lib
-
-        cat <<EOF>>/etc/tomcat6/tomcat6.conf
-          CATALINA_OPTS="\$CATALINA_OPTS -Djcd.host=#{node[:rightscale][:instance_uuid]} -Djcd.instance=tomcat6 -Djcd.dest=udp://#{node[:rightscale][:servers][:sketchy][:hostname]}:3011 -Djcd.tmpl=javalang,tomcat -javaagent:/usr/share/tomcat6/lib/collectd.jar"
-        EOF
-      EOH
-    end
-
-    action_restart
-  else
-    log "  Collectd plugin for Tomcat already installed, skipping..."
+  #installing and configuring collectd for tomcat
+  cookbook_file "/usr/share/java/collectd.jar" do
+    source "collectd.jar"
+    mode "0644"
+    cookbook 'app_tomcat'
   end
+
+  #Linking collectd
+  link "/usr/share/tomcat6/lib/collectd.jar" do
+    to "/usr/share/java/collectd.jar"
+    not_if do !::File.exists?("/usr/share/java/collectd.jar") end
+  end
+
+  #Add collectd support to tomcat.conf
+  bash "Add collectd to tomcat.conf" do
+    flags "-ex"
+    code <<-EOH
+      cat <<EOF>>/etc/tomcat6/tomcat6.conf
+      CATALINA_OPTS="\$CATALINA_OPTS -Djcd.host=#{node[:rightscale][:instance_uuid]} -Djcd.instance=tomcat6 -Djcd.dest=udp://#{node[:rightscale][:servers][:sketchy][:hostname]}:3011 -Djcd.tmpl=javalang,tomcat -javaagent:/usr/share/tomcat6/lib/collectd.jar"
+    EOH
+  end
+
 
 end
 
+#Download/Update application repository
 action :code_update do
 
   log "  Starting code update sequence"
   # Check that we have the required attributes set
   raise "You must provide a destination for your application code." if ("#{node[:tomcat][:docroot]}" == "")
 
-   #Reading app name from tmp file (for execution in "operational" phase))
-  #Waiting for "run_lists"
+  # Reading app name from tmp file (for execution in "operational" phase))
+  # Waiting for "run_lists"
   deploy_dir = node[:tomcat][:docroot]
   if(deploy_dir == "/srv/tomcat6/webapps/")
     app_name = IO.read('/tmp/appname')
@@ -388,7 +386,7 @@ action :code_update do
     recursive true
   end
 
-   log "  Downloading project repo"
+  log "  Downloading project repo"
   repo "default" do
     destination deploy_dir
     action :capistrano_pull
@@ -407,6 +405,7 @@ action :code_update do
       chown -R #{node[:tomcat][:app_user]}:#{node[:tomcat][:app_user]} #{node[:tomcat][:docroot]}
       sleep 5
     EOH
+    only_if do node[:tomcat][:code][:root_war] != "ROOT.war" end
   end
 
   action_restart

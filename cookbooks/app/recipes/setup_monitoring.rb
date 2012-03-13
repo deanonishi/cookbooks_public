@@ -1,5 +1,5 @@
 #
-# Cookbook Name:: db_mysql
+# Cookbook Name::app
 #
 # Copyright RightScale, Inc. All rights reserved.  All access and use subject to the
 # RightScale Terms of Service available at http://www.rightscale.com/terms.php and,
@@ -7,7 +7,10 @@
 
 rs_utils_marker :begin
 
-node[:db_mysql][:version] ||= "5.1"
-include_recipe "db::install_client"
+log "  Configuring monitoring for app server"
+app "default" do
+  action :setup_monitoring
+  persist true
+end
 
 rs_utils_marker :end
