@@ -100,7 +100,7 @@ end
 # Setup apache/passenger virtual host
 action :setup_vhost do
   port = new_resource.app_port
-  project_root = new_resource.app_root
+  project_root = new_resource.root
 
   # Removing preinstalled apache ssl.conf as it conflicts with ports.conf of web:apache
   log "  Removing ssl.conf"
