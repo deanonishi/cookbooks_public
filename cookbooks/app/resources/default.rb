@@ -16,7 +16,7 @@ actions :install
 # Action designed to setup APP LWRP with common parameters required for apache vhost file
 actions :setup_vhost
   # Application root
-  attribute :app_root, :kind_of => String
+  attribute :root, :kind_of => String
   # Application port
   attribute :app_port, :kind_of => String
 
